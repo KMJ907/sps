@@ -1,481 +1,583 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>강의 플래너 Pro</title>
+    <meta name="theme-color" content="#4f46e5">
+    <meta name="description" content="StudyPlanService - 나만의 강의와 학습 계획을 관리하세요.">
 
-  <link rel="stylesheet" href="css/style.css" />
+    <link rel="manifest" href="json/manifest.json">
+    <link rel="icon" href="image/icon-192.png">
 
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#4A90E2" />
+    <title>StudyPlanService</title>
 
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="stylesheet" href="css/style.css">
 </head>
 
 <body>
 
-  <!-- =========================
-       HEADER
-  ========================== -->
-  <header>
+<div id="app">
 
-    <h1>📚 스마트 강의 플래너</h1>
+    <!-- HEADER -->
+    <header class="topbar">
+        <div class="brand">
+            <div class="brand-icon">S</div>
 
-    <nav>
-      <button
-        id="nav-dashboard"
-        class="active"
-        onclick="switchTab('dashboard')">
-        대시보드
-      </button>
-
-      <button
-        id="nav-classroom"
-        onclick="switchTab('classroom')">
-        강의실
-      </button>
-
-      <button
-        id="nav-settings"
-        onclick="switchTab('settings')">
-        설정
-      </button>
-
-      <button
-        id="nav-data"
-        onclick="switchTab('data')">
-        데이터 관리
-      </button>
-
-      <!-- PWA 설치 버튼 -->
-      <button
-        id="install-app-btn"
-        class="install-button"
-        type="button"
-        style="display: none;">
-        📱 앱 설치
-      </button>
-    </nav>
-
-  </header>
-
-
-  <!-- =========================
-       MAIN
-  ========================== -->
-  <main>
-
-    <!-- =====================
-         1. 대시보드
-    ====================== -->
-    <section
-      id="tab-dashboard"
-      class="tab-content active">
-
-      <h2>📅 주간 학습 플랜</h2>
-
-      <div class="weekly-grid">
-
-        <div class="day-card" id="day-월">
-          <h3>월요일</h3>
-          <ul id="list-월"></ul>
+            <div>
+                <h1>StudyPlanService</h1>
+                <span>스마트 학습 플래너</span>
+            </div>
         </div>
 
-        <div class="day-card" id="day-화">
-          <h3>화요일</h3>
-          <ul id="list-화"></ul>
-        </div>
+        <div class="top-actions">
 
-        <div class="day-card" id="day-수">
-          <h3>수요일</h3>
-          <ul id="list-수"></ul>
-        </div>
+            <button
+                id="installBtn"
+                class="icon-button install-button hidden"
+                title="앱 설치">
+                ⬇
+                <span>앱 설치</span>
+            </button>
 
-        <div class="day-card" id="day-목">
-          <h3>목요일</h3>
-          <ul id="list-목"></ul>
-        </div>
+            <button
+                id="notificationBtn"
+                class="icon-button"
+                title="알림 설정">
+                🔔
+            </button>
 
-        <div class="day-card" id="day-금">
-          <h3>금요일</h3>
-          <ul id="list-금"></ul>
-        </div>
+            <button
+                id="themeBtn"
+                class="icon-button"
+                title="테마 변경">
+                🌙
+            </button>
 
-        <div class="day-card" id="day-토">
-          <h3>토요일</h3>
-          <ul id="list-토"></ul>
-        </div>
-
-        <div class="day-card" id="day-일">
-          <h3>일요일</h3>
-          <ul id="list-일"></ul>
-        </div>
-
-      </div>
-
-    </section>
-
-
-    <!-- =====================
-         2. 강의실
-    ====================== -->
-    <section
-      id="tab-classroom"
-      class="tab-content">
-
-      <h2>🏫 강의실</h2>
-
-      <form
-        class="add-course-form"
-        onsubmit="addCourse(event)">
-
-        <h3>새 강좌 등록</h3>
-
-        <div class="form-grid">
-
-          <input
-            type="text"
-            id="input-title"
-            placeholder="강좌명 (예: 개념원리 수학)"
-            required />
-
-          <input
-            type="text"
-            id="input-teacher"
-            placeholder="선생님 성함"
-            required />
-
-          <select
-            id="input-subject"
-            required>
-
-            <option
-              value=""
-              disabled
-              selected>
-              과목 선택
-            </option>
-
-          </select>
-
-          <input
-            type="number"
-            id="input-total-ep"
-            placeholder="총 강의 수 (예: 30)"
-            min="1"
-            required />
+            <button
+                id="settingsBtn"
+                class="icon-button"
+                title="설정">
+                ⚙
+            </button>
 
         </div>
-
-        <button
-          type="submit"
-          class="btn-primary">
-          강좌 등록
-        </button>
-
-      </form>
+    </header>
 
 
-      <!-- 필터 -->
+    <!-- MAIN -->
+    <main class="container">
 
-      <div class="filter-box">
+        <!-- TODAY HERO -->
+        <section class="hero-card">
 
-        <div class="filter-group">
+            <div>
+                <p class="eyebrow">TODAY</p>
 
-          <label for="filter-subject">
-            과목별 필터:
-          </label>
+                <h2 id="todayTitle">
+                    오늘도 차근차근 시작해볼까요?
+                </h2>
 
-          <select
-            id="filter-subject"
-            onchange="renderCourses()">
+                <p id="todayDate"></p>
+            </div>
 
-            <option value="ALL">
-              전체 보기
-            </option>
+            <button
+                id="todayPlanBtn"
+                class="primary-button">
+                오늘의 계획 보기
+            </button>
 
-          </select>
+        </section>
+
+
+        <!-- DASHBOARD -->
+        <section class="stats-grid">
+
+            <article class="stat-card">
+                <div class="stat-icon purple">📚</div>
+                <div>
+                    <span>전체 강좌</span>
+                    <strong id="totalCourses">0</strong>
+                </div>
+            </article>
+
+            <article class="stat-card">
+                <div class="stat-icon blue">▶</div>
+                <div>
+                    <span>완료 강의</span>
+                    <strong id="completedLectures">0</strong>
+                </div>
+            </article>
+
+            <article class="stat-card">
+                <div class="stat-icon green">📈</div>
+                <div>
+                    <span>평균 진도율</span>
+                    <strong id="averageProgress">0%</strong>
+                </div>
+            </article>
+
+            <article class="stat-card">
+                <div class="stat-icon orange">📅</div>
+                <div>
+                    <span>오늘 계획</span>
+                    <strong id="todayPlanCount">0개</strong>
+                </div>
+            </article>
+
+        </section>
+
+
+        <!-- QUICK ACTIONS -->
+        <section class="section">
+
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">QUICK ACTION</p>
+                    <h2>빠른 작업</h2>
+                </div>
+            </div>
+
+            <div class="quick-grid">
+
+                <button class="quick-card" id="addCourseBtn">
+                    <span>➕</span>
+                    <div>
+                        <strong>강좌 추가</strong>
+                        <small>새로운 강좌를 등록합니다.</small>
+                    </div>
+                </button>
+
+                <button class="quick-card" id="addPlanBtn">
+                    <span>📝</span>
+                    <div>
+                        <strong>계획 추가</strong>
+                        <small>오늘 또는 원하는 요일에 계획을 추가합니다.</small>
+                    </div>
+                </button>
+
+                <button class="quick-card" id="backupBtn">
+                    <span>💾</span>
+                    <div>
+                        <strong>백업</strong>
+                        <small>학습 데이터를 JSON으로 저장합니다.</small>
+                    </div>
+                </button>
+
+                <button class="quick-card" id="restoreBtn">
+                    <span>📂</span>
+                    <div>
+                        <strong>복원</strong>
+                        <small>이전에 저장한 데이터를 불러옵니다.</small>
+                    </div>
+                </button>
+
+                <input
+                    id="restoreFile"
+                    type="file"
+                    accept=".json"
+                    hidden>
+
+            </div>
+
+        </section>
+
+
+        <!-- COURSES -->
+        <section class="section">
+
+            <div class="section-header">
+
+                <div>
+                    <p class="eyebrow">COURSES</p>
+                    <h2>내 강좌</h2>
+                </div>
+
+                <div class="section-actions">
+
+                    <input
+                        id="courseSearch"
+                        class="search-input"
+                        type="search"
+                        placeholder="강좌 검색">
+
+                    <select id="subjectFilter" class="select-input">
+                        <option value="all">전체 과목</option>
+                    </select>
+
+                </div>
+
+            </div>
+
+            <div id="courseList" class="course-grid"></div>
+
+            <div id="emptyCourses" class="empty-state hidden">
+                <div>📚</div>
+                <h3>등록된 강좌가 없습니다.</h3>
+                <p>강좌를 추가하여 학습을 시작해보세요.</p>
+            </div>
+
+        </section>
+
+
+        <!-- WEEKLY PLAN -->
+        <section class="section">
+
+            <div class="section-header">
+
+                <div>
+                    <p class="eyebrow">WEEKLY PLAN</p>
+                    <h2>주간 학습 계획</h2>
+                </div>
+
+            </div>
+
+            <div id="weekPlan" class="week-grid"></div>
+
+        </section>
+
+    </main>
+
+
+    <!-- TODAY PLAN MODAL -->
+    <div id="todayModal" class="modal hidden">
+
+        <div class="modal-backdrop"></div>
+
+        <div class="modal-card large">
+
+            <div class="modal-header">
+
+                <div>
+                    <p class="eyebrow">TODAY</p>
+                    <h2>오늘의 계획</h2>
+                    <p id="todayModalDate"></p>
+                </div>
+
+                <button
+                    class="modal-close"
+                    data-close="todayModal">
+                    ×
+                </button>
+
+            </div>
+
+            <div id="todayPlanList" class="today-plan-list"></div>
+
+            <div id="todayEmpty" class="empty-state hidden">
+                <div>☀️</div>
+                <h3>오늘 예정된 계획이 없습니다.</h3>
+                <p>새로운 계획을 추가해보세요.</p>
+            </div>
 
         </div>
-
-
-        <div class="filter-group">
-
-          <label for="filter-teacher">
-            선생님별 필터:
-          </label>
-
-          <select
-            id="filter-teacher"
-            onchange="renderCourses()">
-
-            <option value="ALL">
-              전체 보기
-            </option>
-
-          </select>
-
-        </div>
-
-      </div>
-
-
-      <h3>등록된 강좌 목록</h3>
-
-      <div
-        id="course-list"
-        class="course-list">
-      </div>
-
-    </section>
-
-
-    <!-- =====================
-         3. 설정
-    ====================== -->
-    <section
-      id="tab-settings"
-      class="tab-content">
-
-      <h2>⚙️ 설정</h2>
-
-      <div class="setting-card">
-
-        <h3>과목 관리</h3>
-
-        <p>
-          강좌 등록 시 선택할 과목들을 추가하거나 관리하세요.
-        </p>
-
-        <form
-          class="add-subject-form"
-          onsubmit="addSubject(event)">
-
-          <input
-            type="text"
-            id="input-new-subject"
-            placeholder="새 과목 이름 (예: 국어, 수학, 영단어)"
-            required />
-
-          <button
-            type="submit"
-            class="btn-primary">
-            과목 추가
-          </button>
-
-        </form>
-
-        <ul
-          id="subject-list"
-          class="subject-tag-list">
-        </ul>
-
-      </div>
-
-    </section>
-
-
-    <!-- =====================
-         4. 데이터 관리
-    ====================== -->
-    <section
-      id="tab-data"
-      class="tab-content">
-
-      <h2>💾 데이터 내보내기 / 불러오기</h2>
-
-
-      <div class="data-card">
-
-        <h3>JSON 내보내기</h3>
-
-        <p>
-          현재 기기에 저장된 강좌 데이터와
-          수강 기록, 과목 설정을 파일로 내보냅니다.
-        </p>
-
-        <button
-          onclick="exportData()"
-          class="btn-primary">
-
-          JSON 파일 저장
-
-        </button>
-
-      </div>
-
-
-      <div class="data-card">
-
-        <h3>JSON 불러오기</h3>
-
-        <p>
-          다른 기기에서 저장한 JSON 파일을 선택하여
-          데이터를 불러옵니다.
-        </p>
-
-        <input
-          type="file"
-          id="json-file-input"
-          accept=".json"
-          style="display:none;"
-          onchange="importData(event)" />
-
-        <button
-          onclick="document.getElementById('json-file-input').click()"
-          class="btn-secondary">
-
-          JSON 파일 선택 및 데이터 복구
-
-        </button>
-
-      </div>
-
-    </section>
-
-  </main>
-
-
-  <!-- =========================
-       계획 등록 / 수정 모달
-  ========================== -->
-
-  <div
-    id="plan-modal"
-    class="modal">
-
-    <div class="modal-content">
-
-      <h3>
-        📅 요일별 학습 계획 설정
-      </h3>
-
-      <p
-        id="modal-plan-course-name"
-        class="modal-subtitle">
-      </p>
-
-      <div
-        id="day-settings-container">
-      </div>
-
-      <div class="modal-actions">
-
-        <button
-          onclick="savePlan()"
-          class="btn-primary">
-          저장
-        </button>
-
-        <button
-          class="btn-cancel"
-          onclick="closeModal('plan-modal')">
-          취소
-        </button>
-
-      </div>
 
     </div>
 
-  </div>
 
+    <!-- COURSE MODAL -->
+    <div id="courseModal" class="modal hidden">
 
-  <!-- =========================
-       수강 상태 체크 모달
-  ========================== -->
+        <div class="modal-backdrop"></div>
 
-  <div
-    id="progress-modal"
-    class="modal">
+        <div class="modal-card">
 
-    <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <p class="eyebrow">COURSE</p>
+                    <h2>강좌 추가</h2>
+                </div>
 
-      <h3>
-        ✅ 강의 수강 체크
-      </h3>
+                <button
+                    class="modal-close"
+                    data-close="courseModal">
+                    ×
+                </button>
+            </div>
 
-      <p
-        id="modal-progress-course-name"
-        class="modal-subtitle">
-      </p>
+            <form id="courseForm">
 
-      <div class="progress-bar-container">
+                <label>
+                    강좌명
+                    <input
+                        id="courseName"
+                        required
+                        placeholder="예: 중학 수학 개념완성">
+                </label>
 
-        <div
-          id="modal-progress-bar"
-          class="progress-bar-fill">
+                <label>
+                    과목
+                    <input
+                        id="courseSubject"
+                        required
+                        placeholder="예: 수학">
+                </label>
+
+                <label>
+                    강사
+                    <input
+                        id="courseTeacher"
+                        placeholder="예: 홍길동">
+                </label>
+
+                <label>
+                    전체 강의 수
+                    <input
+                        id="courseTotal"
+                        type="number"
+                        min="1"
+                        value="20"
+                        required>
+                </label>
+
+                <div class="form-actions">
+
+                    <button
+                        type="button"
+                        class="secondary-button"
+                        data-close="courseModal">
+                        취소
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="primary-button">
+                        추가하기
+                    </button>
+
+                </div>
+
+            </form>
+
         </div>
-
-      </div>
-
-      <p
-        id="modal-progress-text"
-        style="text-align: center; margin-bottom: 15px; font-weight: bold;">
-      </p>
-
-      <div
-        id="episode-list-container"
-        class="episode-grid">
-      </div>
-
-      <div class="modal-actions">
-
-        <button
-          onclick="closeModal('progress-modal')"
-          class="btn-primary">
-          닫기
-        </button>
-
-      </div>
 
     </div>
 
-  </div>
+
+    <!-- PLAN MODAL -->
+    <div id="planModal" class="modal hidden">
+
+        <div class="modal-backdrop"></div>
+
+        <div class="modal-card">
+
+            <div class="modal-header">
+
+                <div>
+                    <p class="eyebrow">PLAN</p>
+                    <h2>학습 계획 추가</h2>
+                </div>
+
+                <button
+                    class="modal-close"
+                    data-close="planModal">
+                    ×
+                </button>
+
+            </div>
+
+            <form id="planForm">
+
+                <label>
+                    계획
+                    <input
+                        id="planTitle"
+                        required
+                        placeholder="예: 수학 3강 듣기">
+                </label>
+
+                <label>
+                    날짜
+                    <input
+                        id="planDate"
+                        type="date"
+                        required>
+                </label>
+
+                <label>
+                    과목
+                    <input
+                        id="planSubject"
+                        placeholder="예: 수학">
+                </label>
+
+                <label>
+                    예상 시간(분)
+                    <input
+                        id="planMinutes"
+                        type="number"
+                        min="1"
+                        value="30">
+                </label>
+
+                <div class="form-actions">
+
+                    <button
+                        type="button"
+                        class="secondary-button"
+                        data-close="planModal">
+                        취소
+                    </button>
+
+                    <button
+                        type="submit"
+                        class="primary-button">
+                        추가하기
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
 
 
-  <!-- =========================
-       JavaScript
-  ========================== -->
+    <!-- COURSE DETAIL MODAL -->
+    <div id="courseDetailModal" class="modal hidden">
 
-  <script src="js/app.js"></script>
+        <div class="modal-backdrop"></div>
+
+        <div class="modal-card">
+
+            <div class="modal-header">
+
+                <div>
+                    <p class="eyebrow">COURSE DETAIL</p>
+                    <h2 id="detailCourseName"></h2>
+                </div>
+
+                <button
+                    class="modal-close"
+                    data-close="courseDetailModal">
+                    ×
+                </button>
+
+            </div>
+
+            <div id="courseDetailContent"></div>
+
+        </div>
+
+    </div>
 
 
-  <!-- Service Worker -->
-  <script>
+    <!-- NOTIFICATION MODAL -->
+    <div id="notificationModal" class="modal hidden">
 
-    if ("serviceWorker" in navigator) {
+        <div class="modal-backdrop"></div>
 
-      window.addEventListener("load", () => {
+        <div class="modal-card">
 
-        navigator.serviceWorker
-          .register("js/sw.js")
-          .then((registration) => {
+            <div class="modal-header">
 
-            console.log(
-              "SPS Service Worker 등록 완료:",
-              registration.scope
-            );
+                <div>
+                    <p class="eyebrow">NOTIFICATION</p>
+                    <h2>알림 설정</h2>
+                </div>
 
-          })
-          .catch((error) => {
+                <button
+                    class="modal-close"
+                    data-close="notificationModal">
+                    ×
+                </button>
 
-            console.error(
-              "SPS Service Worker 등록 실패:",
-              error
-            );
+            </div>
 
-          });
+            <div class="setting-row">
 
-      });
+                <div>
+                    <strong>매일 아침 알림</strong>
+                    <p>매일 오전 7시에 오늘의 계획을 알려줍니다.</p>
+                </div>
 
-    }
+                <label class="switch">
+                    <input
+                        id="notificationToggle"
+                        type="checkbox">
+                    <span></span>
+                </label>
 
-  </script>
+            </div>
+
+            <div class="notification-info">
+                <strong>알림 내용</strong>
+                <p>오늘의 계획을 확인하세요!</p>
+            </div>
+
+            <button
+                id="testNotificationBtn"
+                class="secondary-button full-width">
+                테스트 알림 보내기
+            </button>
+
+        </div>
+
+    </div>
+
+
+    <!-- SETTINGS -->
+    <div id="settingsModal" class="modal hidden">
+
+        <div class="modal-backdrop"></div>
+
+        <div class="modal-card">
+
+            <div class="modal-header">
+
+                <div>
+                    <p class="eyebrow">SETTINGS</p>
+                    <h2>설정</h2>
+                </div>
+
+                <button
+                    class="modal-close"
+                    data-close="settingsModal">
+                    ×
+                </button>
+
+            </div>
+
+            <div class="settings-list">
+
+                <button id="settingsNotification" class="settings-item">
+                    <span>🔔</span>
+                    <div>
+                        <strong>알림 설정</strong>
+                        <small>오늘의 계획 알림을 설정합니다.</small>
+                    </div>
+                </button>
+
+                <button id="settingsBackup" class="settings-item">
+                    <span>💾</span>
+                    <div>
+                        <strong>데이터 백업</strong>
+                        <small>현재 데이터를 JSON으로 저장합니다.</small>
+                    </div>
+                </button>
+
+                <button id="settingsReset" class="settings-item danger">
+                    <span>🗑️</span>
+                    <div>
+                        <strong>전체 데이터 초기화</strong>
+                        <small>모든 강좌와 계획을 삭제합니다.</small>
+                    </div>
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- TOAST -->
+    <div id="toast" class="toast"></div>
+
+</div>
+
+<script src="js/app.js"></script>
 
 </body>
 </html>

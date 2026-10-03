@@ -1,30 +1,30 @@
 {
-  "name": "StudyPlanService",
-  "short_name": "SPS",
-  "description": "강의 계획과 학습 진도를 관리하는 스마트 학습 플래너",
-  "start_url": "./index.html",
-  "scope": "./",
-  "display": "standalone",
-  "orientation": "any",
-  "background_color": "#ffffff",
-  "theme_color": "#4A90E2",
-  "lang": "ko",
-  "categories": [
-    "education",
-    "productivity"
-  ],
-  "icons": [
-    {
-      "src": "./image/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "./image/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
-  ]
+    "name": "StudyPlanService",
+    "short_name": "StudyPlan",
+    "description": "강좌와 학습 계획을 관리하는 스마트 학습 플래너",
+    "lang": "ko-KR",
+    "dir": "ltr",
+
+    "start_url": "./",
+    "scope": "./",
+
+    "display": "standalone",
+
+    "background_color": "#f6f7fb",
+    "theme_color": "#4f46e5",
+
+    "icons": [
+        {
+            "src": "../image/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "../image/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ]
 }
