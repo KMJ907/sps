@@ -1,1674 +1,2656 @@
-"use strict";
+const DAYS = [
+  "월",
+  "화",
+  "수",
+  "목",
+  "금",
+  "토",
+  "일"
+];
 
-/*
- * StudyPlanService
- * Version 2
- */
+const DAY_NAMES = {
+  월: "월요일",
+  화: "화요일",
+  수: "수요일",
+  목: "목요일",
+  금: "금요일",
+  토: "토요일",
+  일: "일요일"
+};
 
-const STORAGE_KEY = "sps_data_v4";
-const THEME_KEY = "sps_theme";
-const NOTIFICATION_KEY = "sps_notifications";
+const DEFAULT_SUBJECTS = [
+  "수학",
+  "영어",
+  "국어"
+];
+
+let subjects =
+  JSON.parse(
+    localStorage.getItem("subjects_v3")
+  ) || DEFAULT_SUBJECTS;
+
+let courses =
+  JSON.parse(
+    localStorage.getItem("courses_v3")
+  ) || [];
+
+let selectedCourseId = null;
 
 let deferredInstallPrompt = null;
 
-let state = {
-    courses: [],
-    plans: []
-};
+
+/* =========================================
+   INITIALIZE
+========================================= */
+
+document.addEventListener(
+  "DOMContentLoaded",
+  () => {
+
+    normalizeData();
+
+    renderSubjectDropdowns();
+    renderCourses();
+    renderDashboard();
+    renderSubjectList();
+
+    updateDate();
+
+    setupInstallButton();
+
+    setupServiceWorker();
+
+    checkMorningNotification();
+
+    setupModalKeyboard();
+
+  }
+);
 
 
-/* =========================================================
-   BASIC UTILITIES
-========================================================= */
+/* =========================================
+   DATA NORMALIZATION
+========================================= */
 
-function $(selector) {
-    return document.querySelector(selector);
+function normalizeData() {
+
+  if (!Array.isArray(subjects)) {
+    subjects = [...DEFAULT_SUBJECTS];
+  }
+
+  if (!Array.isArray(courses)) {
+    courses = [];
+  }
+
+  courses = courses.map(course => {
+
+    if (!course.id) {
+      course.id = Date.now() + Math.random();
+    }
+
+    if (!Array.isArray(course.completedEpisodes)) {
+      course.completedEpisodes =
+        new Array(
+          Number(course.totalEp) || 0
+        ).fill(false);
+    }
+
+    if (!course.plan) {
+      course.plan = {};
+    }
+
+    DAYS.forEach(day => {
+
+      if (
+        typeof course.plan[day] !== "number"
+      ) {
+        course.plan[day] = 0;
+      }
+
+    });
+
+    return course;
+
+  });
+
+  saveToLocalStorage();
+
 }
 
-function $$(selector) {
-    return [...document.querySelectorAll(selector)];
+
+/* =========================================
+   NAVIGATION
+========================================= */
+
+function switchTab(tabName) {
+
+  document
+    .querySelectorAll(".tab-content")
+    .forEach(section => {
+
+      section.classList.remove("active");
+
+    });
+
+
+  const target =
+    document.getElementById(
+      `tab-${tabName}`
+    );
+
+  if (target) {
+    target.classList.add("active");
+  }
+
+
+  document
+    .querySelectorAll(".nav-item")
+    .forEach(button => {
+
+      button.classList.remove("active");
+
+    });
+
+
+  document
+    .querySelectorAll(".mobile-nav-item")
+    .forEach(button => {
+
+      button.classList.remove("active");
+
+    });
+
+
+  const desktopNav =
+    document.getElementById(
+      `nav-${tabName}`
+    );
+
+  const mobileNav =
+    document.getElementById(
+      `mobile-nav-${tabName}`
+    );
+
+
+  if (desktopNav) {
+    desktopNav.classList.add("active");
+  }
+
+  if (mobileNav) {
+    mobileNav.classList.add("active");
+  }
+
+
+  updatePageHeader(tabName);
+
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+
+
+  if (tabName === "dashboard") {
+    renderDashboard();
+  }
+
+  if (tabName === "classroom") {
+    renderSubjectDropdowns();
+    renderCourses();
+  }
+
+  if (tabName === "settings") {
+    renderSubjectList();
+  }
+
 }
 
-function uid(prefix = "id") {
-    return `${prefix}_${Date.now()}_${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
+
+/* =========================================
+   PAGE HEADER
+========================================= */
+
+function updatePageHeader(tabName) {
+
+  const titles = {
+
+    dashboard: [
+      "홈",
+      "오늘의 학습을 확인하세요."
+    ],
+
+    classroom: [
+      "강좌",
+      "수강 중인 강좌를 관리하세요."
+    ],
+
+    settings: [
+      "설정",
+      "SPS 환경을 관리하세요."
+    ],
+
+    data: [
+      "데이터 관리",
+      "학습 데이터를 안전하게 관리하세요."
+    ]
+
+  };
+
+
+  const data =
+    titles[tabName] ||
+    titles.dashboard;
+
+
+  const title =
+    document.getElementById(
+      "page-title"
+    );
+
+  const subtitle =
+    document.getElementById(
+      "page-subtitle"
+    );
+
+
+  if (title) {
+    title.textContent = data[0];
+  }
+
+  if (subtitle) {
+    subtitle.textContent = data[1];
+  }
+
 }
 
-function todayString() {
-    const date = new Date();
 
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
+/* =========================================
+   SUBJECT
+========================================= */
 
-    return `${year}-${month}-${day}`;
+function addSubject(event) {
+
+  event.preventDefault();
+
+
+  const input =
+    document.getElementById(
+      "input-new-subject"
+    );
+
+
+  const name =
+    input.value.trim();
+
+
+  if (!name) {
+    return;
+  }
+
+
+  if (subjects.includes(name)) {
+
+    alert(
+      "이미 존재하는 과목입니다."
+    );
+
+    return;
+
+  }
+
+
+  subjects.push(name);
+
+  saveToLocalStorage();
+
+  input.value = "";
+
+  renderSubjectList();
+
+  renderSubjectDropdowns();
+
 }
 
-function formatDate(dateString) {
-    const date = new Date(`${dateString}T00:00:00`);
 
-    return date.toLocaleDateString("ko-KR", {
+function deleteSubject(subjectName) {
+
+  const used =
+    courses.some(
+      course =>
+        course.subject === subjectName
+    );
+
+
+  let message =
+    `'${subjectName}' 과목을 삭제하시겠습니까?`;
+
+
+  if (used) {
+
+    message +=
+      "\n\n현재 이 과목을 사용하는 강좌가 있습니다.";
+
+  }
+
+
+  if (!confirm(message)) {
+    return;
+  }
+
+
+  subjects =
+    subjects.filter(
+      subject =>
+        subject !== subjectName
+    );
+
+
+  saveToLocalStorage();
+
+  renderSubjectList();
+
+  renderSubjectDropdowns();
+
+}
+
+
+function renderSubjectList() {
+
+  const list =
+    document.getElementById(
+      "subject-list"
+    );
+
+
+  if (!list) {
+    return;
+  }
+
+
+  list.innerHTML = "";
+
+
+  if (subjects.length === 0) {
+
+    list.innerHTML =
+      "<li style='color:#94a3b8;font-size:12px;'>등록된 과목이 없습니다.</li>";
+
+    return;
+
+  }
+
+
+  subjects.forEach(subject => {
+
+    const li =
+      document.createElement("li");
+
+    li.className =
+      "subject-tag";
+
+
+    const span =
+      document.createElement("span");
+
+    span.textContent =
+      subject;
+
+
+    const button =
+      document.createElement("button");
+
+    button.type = "button";
+
+    button.textContent = "×";
+
+    button.onclick = () =>
+      deleteSubject(subject);
+
+
+    li.appendChild(span);
+
+    li.appendChild(button);
+
+    list.appendChild(li);
+
+  });
+
+}
+
+
+function renderSubjectDropdowns() {
+
+  const select =
+    document.getElementById(
+      "input-subject"
+    );
+
+
+  if (!select) {
+    return;
+  }
+
+
+  const current =
+    select.value;
+
+
+  select.innerHTML =
+    `
+      <option value="" disabled>
+        과목 선택
+      </option>
+    `;
+
+
+  subjects.forEach(subject => {
+
+    const option =
+      document.createElement(
+        "option"
+      );
+
+    option.value = subject;
+
+    option.textContent = subject;
+
+    select.appendChild(option);
+
+  });
+
+
+  if (
+    subjects.includes(current)
+  ) {
+
+    select.value = current;
+
+  } else {
+
+    select.selectedIndex = 0;
+
+  }
+
+}
+
+
+/* =========================================
+   COURSE
+========================================= */
+
+function addCourse(event) {
+
+  event.preventDefault();
+
+
+  const title =
+    document
+      .getElementById("input-title")
+      .value
+      .trim();
+
+
+  const teacher =
+    document
+      .getElementById("input-teacher")
+      .value
+      .trim();
+
+
+  const subject =
+    document
+      .getElementById("input-subject")
+      .value;
+
+
+  const totalEp =
+    parseInt(
+      document
+        .getElementById("input-total-ep")
+        .value,
+      10
+    );
+
+
+  if (
+    !title ||
+    !teacher ||
+    !subject ||
+    !totalEp ||
+    totalEp < 1
+  ) {
+
+    alert(
+      "모든 항목을 올바르게 입력해주세요."
+    );
+
+    return;
+
+  }
+
+
+  const newCourse = {
+
+    id:
+      Date.now(),
+
+    title,
+
+    teacher,
+
+    subject,
+
+    totalEp,
+
+    completedEpisodes:
+      new Array(totalEp).fill(false),
+
+    plan: {
+
+      월: 0,
+      화: 0,
+      수: 0,
+      목: 0,
+      금: 0,
+      토: 0,
+      일: 0
+
+    }
+
+  };
+
+
+  courses.push(newCourse);
+
+  saveToLocalStorage();
+
+
+  event.target.reset();
+
+
+  renderSubjectDropdowns();
+
+  renderCourses();
+
+  renderDashboard();
+
+
+  alert(
+    "강좌가 등록되었습니다."
+  );
+
+}
+
+
+function deleteCourse(id) {
+
+  const course =
+    courses.find(
+      item =>
+        item.id === id
+    );
+
+
+  if (!course) {
+    return;
+  }
+
+
+  if (
+    !confirm(
+      `"${course.title}" 강좌를 삭제하시겠습니까?`
+    )
+  ) {
+    return;
+  }
+
+
+  courses =
+    courses.filter(
+      item =>
+        item.id !== id
+    );
+
+
+  saveToLocalStorage();
+
+  renderCourses();
+
+  renderDashboard();
+
+}
+
+
+/* =========================================
+   COURSE RENDER
+========================================= */
+
+function renderCourses() {
+
+  updateFilterOptions();
+
+
+  const list =
+    document.getElementById(
+      "course-list"
+    );
+
+
+  if (!list) {
+    return;
+  }
+
+
+  const subjectFilter =
+    document.getElementById(
+      "filter-subject"
+    )?.value || "ALL";
+
+
+  const teacherFilter =
+    document.getElementById(
+      "filter-teacher"
+    )?.value || "ALL";
+
+
+  const filtered =
+    courses.filter(course => {
+
+      const subjectMatch =
+        subjectFilter === "ALL" ||
+        course.subject === subjectFilter;
+
+
+      const teacherMatch =
+        teacherFilter === "ALL" ||
+        course.teacher === teacherFilter;
+
+
+      return (
+        subjectMatch &&
+        teacherMatch
+      );
+
+    });
+
+
+  const count =
+    document.getElementById(
+      "course-count-label"
+    );
+
+
+  if (count) {
+    count.textContent =
+      `${filtered.length}개`;
+  }
+
+
+  list.innerHTML = "";
+
+
+  if (filtered.length === 0) {
+
+    list.innerHTML = `
+      <div
+        style="
+          grid-column:1/-1;
+          padding:40px 20px;
+          text-align:center;
+          color:#94a3b8;
+          font-size:13px;
+        "
+      >
+        등록된 강좌가 없습니다.
+      </div>
+    `;
+
+    return;
+
+  }
+
+
+  filtered.forEach(
+    course =>
+      list.appendChild(
+        createCourseElement(course)
+      )
+  );
+
+}
+
+
+function createCourseElement(course) {
+
+  const item =
+    document.createElement("article");
+
+
+  item.className =
+    "course-item";
+
+
+  const completed =
+    getCompletedCount(course);
+
+
+  const progress =
+    getProgress(course);
+
+
+  const planSummary =
+    getPlanSummary(course);
+
+
+  item.innerHTML = `
+
+    <div class="course-info">
+
+      <h4>
+        ${escapeHtml(course.title)}
+      </h4>
+
+
+      <div class="course-tags">
+
+        <span class="tag">
+          ${escapeHtml(course.subject)}
+        </span>
+
+        <span class="tag">
+          ${escapeHtml(course.teacher)}
+        </span>
+
+      </div>
+
+
+      <div class="course-progress-info">
+
+        <span>
+          진도
+        </span>
+
+        <strong>
+          ${completed}/${course.totalEp}강
+          · ${progress}%
+        </strong>
+
+      </div>
+
+
+      <div class="progress-bar-container">
+
+        <div
+          class="progress-bar-fill"
+          style="width:${progress}%"
+        ></div>
+
+      </div>
+
+
+      <p class="course-plan-summary">
+        ${
+          planSummary ||
+          "설정된 학습 계획이 없습니다."
+        }
+      </p>
+
+    </div>
+
+
+    <div class="course-actions">
+
+      <button
+        class="btn-progress"
+        onclick="openProgressModal(${course.id})"
+      >
+        진도 체크
+      </button>
+
+
+      <button
+        class="btn-plan"
+        onclick="openPlanModal(${course.id})"
+      >
+        계획 수정
+      </button>
+
+
+      <button
+        class="btn-delete"
+        onclick="deleteCourse(${course.id})"
+      >
+        삭제
+      </button>
+
+    </div>
+
+  `;
+
+
+  return item;
+
+}
+
+
+/* =========================================
+   FILTER
+========================================= */
+
+function updateFilterOptions() {
+
+  const subjectSelect =
+    document.getElementById(
+      "filter-subject"
+    );
+
+
+  const teacherSelect =
+    document.getElementById(
+      "filter-teacher"
+    );
+
+
+  if (
+    !subjectSelect ||
+    !teacherSelect
+  ) {
+    return;
+  }
+
+
+  const oldSubject =
+    subjectSelect.value || "ALL";
+
+
+  const oldTeacher =
+    teacherSelect.value || "ALL";
+
+
+  const subjectsInCourses =
+    [
+      ...new Set(
+        courses
+          .map(course =>
+            course.subject
+          )
+          .filter(Boolean)
+      )
+    ];
+
+
+  const teachersInCourses =
+    [
+      ...new Set(
+        courses
+          .map(course =>
+            course.teacher
+          )
+          .filter(Boolean)
+      )
+    ];
+
+
+  subjectSelect.innerHTML =
+    `
+      <option value="ALL">
+        전체 보기
+      </option>
+    `;
+
+
+  subjectsInCourses.forEach(
+    subject => {
+
+      const option =
+        document.createElement(
+          "option"
+        );
+
+      option.value = subject;
+
+      option.textContent = subject;
+
+      subjectSelect.appendChild(
+        option
+      );
+
+    }
+  );
+
+
+  teacherSelect.innerHTML =
+    `
+      <option value="ALL">
+        전체 보기
+      </option>
+    `;
+
+
+  teachersInCourses.forEach(
+    teacher => {
+
+      const option =
+        document.createElement(
+          "option"
+        );
+
+      option.value = teacher;
+
+      option.textContent = teacher;
+
+      teacherSelect.appendChild(
+        option
+      );
+
+    }
+  );
+
+
+  if (
+    subjectsInCourses.includes(
+      oldSubject
+    )
+  ) {
+
+    subjectSelect.value =
+      oldSubject;
+
+  } else {
+
+    subjectSelect.value =
+      "ALL";
+
+  }
+
+
+  if (
+    teachersInCourses.includes(
+      oldTeacher
+    )
+  ) {
+
+    teacherSelect.value =
+      oldTeacher;
+
+  } else {
+
+    teacherSelect.value =
+      "ALL";
+
+  }
+
+}
+
+
+/* =========================================
+   PROGRESS
+========================================= */
+
+function openProgressModal(id) {
+
+  selectedCourseId = id;
+
+
+  const course =
+    courses.find(
+      item =>
+        item.id === id
+    );
+
+
+  if (!course) {
+    return;
+  }
+
+
+  document
+    .getElementById(
+      "modal-progress-course-name"
+    )
+    .textContent =
+      course.title;
+
+
+  renderEpisodeGrid(course);
+
+
+  document
+    .getElementById(
+      "progress-modal"
+    )
+    .classList
+    .add("active");
+
+
+  document.body.style.overflow =
+    "hidden";
+
+}
+
+
+function renderEpisodeGrid(course) {
+
+  const container =
+    document.getElementById(
+      "episode-list-container"
+    );
+
+
+  const completed =
+    getCompletedCount(course);
+
+
+  const progress =
+    getProgress(course);
+
+
+  document
+    .getElementById(
+      "modal-progress-text"
+    )
+    .textContent =
+      `${completed} / ${course.totalEp}강 완료 · ${progress}%`;
+
+
+  document
+    .getElementById(
+      "modal-progress-bar"
+    )
+    .style.width =
+      `${progress}%`;
+
+
+  container.innerHTML = "";
+
+
+  course.completedEpisodes.forEach(
+    (done, index) => {
+
+      const label =
+        document.createElement(
+          "label"
+        );
+
+
+      label.className =
+        "episode-item";
+
+
+      label.innerHTML = `
+
+        <input
+          type="checkbox"
+          ${done ? "checked" : ""}
+        >
+
+        <span>
+          ${index + 1}강
+        </span>
+
+      `;
+
+
+      const checkbox =
+        label.querySelector(
+          "input"
+        );
+
+
+      checkbox.addEventListener(
+        "change",
+        () =>
+          toggleEpisode(index)
+      );
+
+
+      container.appendChild(
+        label
+      );
+
+    }
+  );
+
+}
+
+
+function toggleEpisode(index) {
+
+  const course =
+    courses.find(
+      item =>
+        item.id === selectedCourseId
+    );
+
+
+  if (!course) {
+    return;
+  }
+
+
+  course.completedEpisodes[index] =
+    !course.completedEpisodes[index];
+
+
+  saveToLocalStorage();
+
+
+  renderEpisodeGrid(course);
+
+  renderCourses();
+
+  renderDashboard();
+
+}
+
+
+/* =========================================
+   PLAN MODAL
+========================================= */
+
+function openPlanModal(id) {
+
+  selectedCourseId = id;
+
+
+  const course =
+    courses.find(
+      item =>
+        item.id === id
+    );
+
+
+  if (!course) {
+    return;
+  }
+
+
+  document
+    .getElementById(
+      "modal-plan-course-name"
+    )
+    .textContent =
+      course.title;
+
+
+  const container =
+    document.getElementById(
+      "day-settings-container"
+    );
+
+
+  container.innerHTML = "";
+
+
+  DAYS.forEach(day => {
+
+    const row =
+      document.createElement(
+        "div"
+      );
+
+
+    row.className =
+      "day-row";
+
+
+    row.innerHTML = `
+
+      <span>
+        ${DAY_NAMES[day]}
+      </span>
+
+      <div>
+
+        <input
+          type="number"
+          min="0"
+          max="${course.totalEp}"
+          id="input-day-${day}"
+          value="${course.plan[day] || 0}"
+        >
+
+        강
+
+      </div>
+
+    `;
+
+
+    container.appendChild(row);
+
+  });
+
+
+  document
+    .getElementById(
+      "plan-modal"
+    )
+    .classList
+    .add("active");
+
+
+  document.body.style.overflow =
+    "hidden";
+
+}
+
+
+function savePlan() {
+
+  const course =
+    courses.find(
+      item =>
+        item.id === selectedCourseId
+    );
+
+
+  if (!course) {
+    return;
+  }
+
+
+  DAYS.forEach(day => {
+
+    const input =
+      document.getElementById(
+        `input-day-${day}`
+      );
+
+
+    const value =
+      parseInt(
+        input.value,
+        10
+      ) || 0;
+
+
+    course.plan[day] =
+      Math.max(
+        0,
+        Math.min(
+          value,
+          course.totalEp
+        )
+      );
+
+  });
+
+
+  saveToLocalStorage();
+
+  closeModal("plan-modal");
+
+  renderCourses();
+
+  renderDashboard();
+
+}
+
+
+function closeModal(modalId) {
+
+  const modal =
+    document.getElementById(
+      modalId
+    );
+
+
+  if (modal) {
+    modal.classList.remove(
+      "active"
+    );
+  }
+
+
+  if (
+    !document.querySelector(
+      ".modal.active"
+    )
+  ) {
+
+    document.body.style.overflow =
+      "";
+
+  }
+
+
+  selectedCourseId = null;
+
+}
+
+
+/* =========================================
+   DASHBOARD
+========================================= */
+
+function renderDashboard() {
+
+  updateTodayDate();
+
+  renderTodayPlans();
+
+  renderStats();
+
+  renderRecentCourses();
+
+  renderWeeklyPlan();
+
+}
+
+
+function renderStats() {
+
+  const courseStat =
+    document.getElementById(
+      "stat-courses"
+    );
+
+
+  const progressStat =
+    document.getElementById(
+      "stat-progress"
+    );
+
+
+  const todayStat =
+    document.getElementById(
+      "stat-today"
+    );
+
+
+  if (courseStat) {
+    courseStat.textContent =
+      courses.length;
+  }
+
+
+  let totalEpisodes = 0;
+
+  let completedEpisodes = 0;
+
+
+  courses.forEach(course => {
+
+    totalEpisodes +=
+      Number(course.totalEp) || 0;
+
+    completedEpisodes +=
+      getCompletedCount(course);
+
+  });
+
+
+  const average =
+    totalEpisodes === 0
+      ? 0
+      : Math.round(
+          (
+            completedEpisodes /
+            totalEpisodes
+          ) *
+          100
+        );
+
+
+  if (progressStat) {
+    progressStat.textContent =
+      `${average}%`;
+  }
+
+
+  const today =
+    getTodayDay();
+
+
+  const todayCount =
+    courses.reduce(
+      (sum, course) =>
+        sum +
+        (
+          Number(
+            course.plan?.[today]
+          ) || 0
+        ),
+      0
+    );
+
+
+  if (todayStat) {
+    todayStat.textContent =
+      todayCount;
+  }
+
+}
+
+
+function renderTodayPlans() {
+
+  const container =
+    document.getElementById(
+      "today-plan-list"
+    );
+
+
+  if (!container) {
+    return;
+  }
+
+
+  const plans =
+    getTodayPlans();
+
+
+  const progressCircle =
+    document.getElementById(
+      "today-progress-circle"
+    );
+
+
+  const progressNumber =
+    document.getElementById(
+      "today-progress-number"
+    );
+
+
+  let doneCount = 0;
+
+
+  plans.forEach(plan => {
+
+    const course =
+      courses.find(
+        c =>
+          c.id === plan.courseId
+      );
+
+
+    if (!course) {
+      return;
+    }
+
+
+    const target =
+      getPlanEpisodeIndexes(
+        course,
+        plan.count
+      );
+
+
+    target.forEach(index => {
+
+      if (
+        course.completedEpisodes[index]
+      ) {
+        doneCount++;
+      }
+
+    });
+
+  });
+
+
+  const total =
+    plans.reduce(
+      (sum, plan) =>
+        sum + plan.count,
+      0
+    );
+
+
+  const percentage =
+    total === 0
+      ? 0
+      : Math.round(
+          (doneCount / total) * 100
+        );
+
+
+  if (progressNumber) {
+    progressNumber.textContent =
+      `${percentage}%`;
+  }
+
+
+  if (progressCircle) {
+
+    progressCircle.style.background =
+      `
+        conic-gradient(
+          #60a5fa ${percentage * 3.6}deg,
+          rgba(255,255,255,0.18)
+          ${percentage * 3.6}deg
+        )
+      `;
+
+  }
+
+
+  container.innerHTML = "";
+
+
+  if (plans.length === 0) {
+
+    container.innerHTML = `
+      <div class="today-empty">
+        오늘 등록된 학습 계획이 없습니다.
+      </div>
+    `;
+
+    return;
+
+  }
+
+
+  plans.forEach(
+    (plan, index) => {
+
+      const item =
+        document.createElement(
+          "div"
+        );
+
+
+      item.className =
+        "today-plan-item";
+
+
+      item.innerHTML = `
+
+        <div class="plan-number">
+          ${index + 1}
+        </div>
+
+        <div>
+
+          <strong>
+            ${escapeHtml(plan.title)}
+          </strong>
+
+          <span>
+            ${escapeHtml(plan.subject)}
+            · ${plan.count}강
+          </span>
+
+        </div>
+
+      `;
+
+
+      container.appendChild(
+        item
+      );
+
+    }
+  );
+
+}
+
+
+function renderRecentCourses() {
+
+  const container =
+    document.getElementById(
+      "recent-course-list"
+    );
+
+
+  if (!container) {
+    return;
+  }
+
+
+  container.innerHTML = "";
+
+
+  if (courses.length === 0) {
+
+    container.innerHTML = `
+      <div
+        style="
+          grid-column:1/-1;
+          color:#94a3b8;
+          font-size:12px;
+          padding:15px 0;
+        "
+      >
+        아직 등록된 강좌가 없습니다.
+      </div>
+    `;
+
+    return;
+
+  }
+
+
+  courses
+    .slice()
+    .sort(
+      (a, b) =>
+        getProgress(b) -
+        getProgress(a)
+    )
+    .slice(0, 6)
+    .forEach(course => {
+
+      const card =
+        document.createElement(
+          "article"
+        );
+
+
+      card.className =
+        "recent-course";
+
+
+      const progress =
+        getProgress(course);
+
+
+      card.innerHTML = `
+
+        <div class="recent-course-title">
+          ${escapeHtml(course.title)}
+        </div>
+
+        <div class="recent-course-meta">
+          ${escapeHtml(course.subject)}
+          · ${escapeHtml(course.teacher)}
+        </div>
+
+        <div class="recent-course-progress">
+
+          <div
+            class="progress-bar-container"
+          >
+            <div
+              class="progress-bar-fill"
+              style="width:${progress}%"
+            ></div>
+          </div>
+
+        </div>
+
+        <div
+          style="
+            margin-top:6px;
+            color:#64748b;
+            font-size:10px;
+          "
+        >
+          ${progress}% 완료
+        </div>
+
+      `;
+
+
+      card.onclick = () =>
+        openProgressModal(course.id);
+
+
+      container.appendChild(card);
+
+    });
+
+}
+
+
+function renderWeeklyPlan() {
+
+  const today =
+    getTodayDay();
+
+
+  DAYS.forEach(day => {
+
+    const card =
+      document.getElementById(
+        `day-${day}`
+      );
+
+
+    const list =
+      document.getElementById(
+        `list-${day}`
+      );
+
+
+    if (!card || !list) {
+      return;
+    }
+
+
+    card.classList.toggle(
+      "today",
+      day === today
+    );
+
+
+    list.innerHTML = "";
+
+
+    let hasPlan = false;
+
+
+    courses.forEach(course => {
+
+      const count =
+        Number(
+          course.plan?.[day]
+        ) || 0;
+
+
+      if (count <= 0) {
+        return;
+      }
+
+
+      hasPlan = true;
+
+
+      const li =
+        document.createElement(
+          "li"
+        );
+
+
+      li.textContent =
+        `[${course.subject}] ${course.title} · ${count}강`;
+
+
+      list.appendChild(li);
+
+    });
+
+
+    if (!hasPlan) {
+
+      const li =
+        document.createElement(
+          "li"
+        );
+
+
+      li.className =
+        "empty";
+
+
+      li.textContent =
+        "일정 없음";
+
+
+      list.appendChild(li);
+
+    }
+
+  });
+
+}
+
+
+/* =========================================
+   TODAY
+========================================= */
+
+function getTodayDay() {
+
+  const index =
+    new Date().getDay();
+
+
+  return DAYS[
+    index === 0
+      ? 6
+      : index - 1
+  ];
+
+}
+
+
+function getTodayPlans() {
+
+  const day =
+    getTodayDay();
+
+
+  const plans = [];
+
+
+  courses.forEach(course => {
+
+    const count =
+      Number(
+        course.plan?.[day]
+      ) || 0;
+
+
+    if (count > 0) {
+
+      plans.push({
+
+        courseId:
+          course.id,
+
+        title:
+          course.title,
+
+        subject:
+          course.subject,
+
+        count
+
+      });
+
+    }
+
+  });
+
+
+  return plans;
+
+}
+
+
+function showTodayPlans() {
+
+  const container =
+    document.getElementById(
+      "today-modal-list"
+    );
+
+
+  const plans =
+    getTodayPlans();
+
+
+  container.innerHTML = "";
+
+
+  if (plans.length === 0) {
+
+    container.innerHTML = `
+      <div class="today-modal-item">
+        <strong>
+          오늘의 계획이 없습니다.
+        </strong>
+
+        <span>
+          강좌에서 학습 계획을 설정해보세요.
+        </span>
+      </div>
+    `;
+
+  } else {
+
+    plans.forEach(plan => {
+
+      const item =
+        document.createElement(
+          "div"
+        );
+
+
+      item.className =
+        "today-modal-item";
+
+
+      item.innerHTML = `
+
+        <strong>
+          ${escapeHtml(plan.title)}
+        </strong>
+
+        <span>
+          ${escapeHtml(plan.subject)}
+          · 오늘 ${plan.count}강
+        </span>
+
+      `;
+
+
+      container.appendChild(item);
+
+    });
+
+  }
+
+
+  document
+    .getElementById(
+      "today-modal"
+    )
+    .classList
+    .add("active");
+
+
+  document.body.style.overflow =
+    "hidden";
+
+}
+
+
+/* =========================================
+   DATE
+========================================= */
+
+function updateDate() {
+
+  const element =
+    document.getElementById(
+      "mobile-date"
+    );
+
+
+  if (!element) {
+    return;
+  }
+
+
+  const now =
+    new Date();
+
+
+  element.textContent =
+    now.toLocaleDateString(
+      "ko-KR",
+      {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        weekday: "short"
+      }
+    );
+
+}
+
+
+function updateTodayDate() {
+
+  const element =
+    document.getElementById(
+      "today-date"
+    );
+
+
+  if (!element) {
+    return;
+  }
+
+
+  const now =
+    new Date();
+
+
+  element.textContent =
+    now.toLocaleDateString(
+      "ko-KR",
+      {
         year: "numeric",
         month: "long",
         day: "numeric",
         weekday: "long"
-    });
-}
-
-function escapeHTML(value) {
-    return String(value ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-}
-
-
-/* =========================================================
-   STORAGE
-========================================================= */
-
-function saveState() {
-    localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(state)
-    );
-}
-
-function loadState() {
-
-    const raw =
-        localStorage.getItem(STORAGE_KEY);
-
-    if (!raw) {
-        state = {
-            courses: [],
-            plans: []
-        };
-
-        return;
-    }
-
-    try {
-
-        const parsed = JSON.parse(raw);
-
-        state = {
-            courses: Array.isArray(parsed.courses)
-                ? parsed.courses
-                : [],
-
-            plans: Array.isArray(parsed.plans)
-                ? parsed.plans
-                : []
-        };
-
-    } catch {
-
-        state = {
-            courses: [],
-            plans: []
-        };
-    }
-}
-
-
-/* =========================================================
-   THEME
-========================================================= */
-
-function loadTheme() {
-
-    const theme =
-        localStorage.getItem(THEME_KEY);
-
-    if (theme === "dark") {
-        document.body.classList.add("dark");
-        $("#themeBtn").textContent = "☀️";
-    }
-}
-
-function toggleTheme() {
-
-    const isDark =
-        document.body.classList.toggle("dark");
-
-    localStorage.setItem(
-        THEME_KEY,
-        isDark ? "dark" : "light"
+      }
     );
 
-    $("#themeBtn").textContent =
-        isDark ? "☀️" : "🌙";
 }
 
 
-/* =========================================================
-   DASHBOARD
-========================================================= */
+/* =========================================
+   LOCAL STORAGE
+========================================= */
 
-function updateDashboard() {
+function saveToLocalStorage() {
 
-    const totalCourses =
-        state.courses.length;
+  localStorage.setItem(
+    "subjects_v3",
+    JSON.stringify(subjects)
+  );
 
-    const completed =
-        state.courses.reduce(
-            (sum, course) =>
-                sum + Number(course.completed || 0),
-            0
-        );
 
-    const totalLectures =
-        state.courses.reduce(
-            (sum, course) =>
-                sum + Number(course.total || 0),
-            0
-        );
+  localStorage.setItem(
+    "courses_v3",
+    JSON.stringify(courses)
+  );
 
-    const average =
-        totalLectures === 0
-            ? 0
-            : Math.round(
-                completed /
-                totalLectures *
-                100
-            );
-
-    const todayCount =
-        state.plans.filter(
-            plan =>
-                plan.date === todayString()
-        ).length;
-
-    $("#totalCourses").textContent =
-        totalCourses;
-
-    $("#completedLectures").textContent =
-        completed;
-
-    $("#averageProgress").textContent =
-        `${average}%`;
-
-    $("#todayPlanCount").textContent =
-        `${todayCount}개`;
 }
 
 
-/* =========================================================
-   COURSE
-========================================================= */
+/* =========================================
+   EXPORT
+========================================= */
 
-function renderSubjects() {
+function exportData() {
 
-    const filter =
-        $("#subjectFilter");
+  if (
+    courses.length === 0 &&
+    subjects.length === 0
+  ) {
 
-    const current =
-        filter.value;
+    alert(
+      "내보낼 데이터가 없습니다."
+    );
 
-    const subjects = [
-        ...new Set(
-            state.courses
-                .map(course => course.subject)
-                .filter(Boolean)
+    return;
+
+  }
+
+
+  const backup = {
+
+    app:
+      "SPS",
+
+    version:
+      "3.0",
+
+    exportedAt:
+      new Date().toISOString(),
+
+    subjects,
+
+    courses
+
+  };
+
+
+  const blob =
+    new Blob(
+      [
+        JSON.stringify(
+          backup,
+          null,
+          2
         )
-    ];
+      ],
+      {
+        type:
+          "application/json"
+      }
+    );
 
-    filter.innerHTML =
-        `<option value="all">전체 과목</option>` +
-        subjects
-            .sort()
-            .map(
-                subject =>
-                    `<option value="${escapeHTML(subject)}">
-                        ${escapeHTML(subject)}
-                    </option>`
+
+  const url =
+    URL.createObjectURL(blob);
+
+
+  const link =
+    document.createElement(
+      "a"
+    );
+
+
+  const date =
+    new Date()
+      .toISOString()
+      .slice(0, 10);
+
+
+  link.href = url;
+
+  link.download =
+    `SPS-backup-${date}.json`;
+
+
+  link.click();
+
+
+  URL.revokeObjectURL(url);
+
+}
+
+
+/* =========================================
+   IMPORT
+========================================= */
+
+function importData(event) {
+
+  const file =
+    event.target.files?.[0];
+
+
+  if (!file) {
+    return;
+  }
+
+
+  const reader =
+    new FileReader();
+
+
+  reader.onload =
+    function (e) {
+
+      try {
+
+        const data =
+          JSON.parse(
+            e.target.result
+          );
+
+
+        let importedCourses;
+        let importedSubjects;
+
+
+        if (
+          data &&
+          Array.isArray(
+            data.courses
+          )
+        ) {
+
+          importedCourses =
+            data.courses;
+
+          importedSubjects =
+            Array.isArray(
+              data.subjects
             )
-            .join("");
+              ? data.subjects
+              : DEFAULT_SUBJECTS;
 
-    if (
-        subjects.includes(current)
-    ) {
-        filter.value = current;
-    }
-}
-
-function getProgress(course) {
-
-    const total =
-        Number(course.total || 0);
-
-    const completed =
-        Number(course.completed || 0);
-
-    if (total <= 0) {
-        return 0;
-    }
-
-    return Math.min(
-        100,
-        Math.round(
-            completed / total * 100
-        )
-    );
-}
-
-function renderCourses() {
-
-    const container =
-        $("#courseList");
-
-    const search =
-        $("#courseSearch").value
-            .trim()
-            .toLowerCase();
-
-    const subject =
-        $("#subjectFilter").value;
-
-    const courses =
-        state.courses.filter(course => {
-
-            const matchesSearch =
-                !search ||
-                course.name
-                    .toLowerCase()
-                    .includes(search) ||
-                String(course.teacher || "")
-                    .toLowerCase()
-                    .includes(search);
-
-            const matchesSubject =
-                subject === "all" ||
-                course.subject === subject;
-
-            return (
-                matchesSearch &&
-                matchesSubject
-            );
-        });
-
-    $("#emptyCourses")
-        .classList.toggle(
-            "hidden",
-            courses.length !== 0
-        );
-
-    container.innerHTML =
-        courses.map(course => {
-
-            const progress =
-                getProgress(course);
-
-            return `
-                <article class="course-card">
-
-                    <div class="course-top">
-
-                        <span class="course-subject">
-                            ${escapeHTML(course.subject)}
-                        </span>
-
-                        <button
-                            class="course-delete"
-                            data-course-delete="${course.id}"
-                            title="삭제">
-                            ⋮
-                        </button>
-
-                    </div>
-
-                    <h3>
-                        ${escapeHTML(course.name)}
-                    </h3>
-
-                    <div class="course-teacher">
-                        ${course.teacher
-                            ? escapeHTML(course.teacher)
-                            : "강사 정보 없음"}
-                    </div>
-
-                    <div class="progress-wrap">
-
-                        <div class="progress-label">
-
-                            <span>진도율</span>
-
-                            <strong>
-                                ${progress}%
-                            </strong>
-
-                        </div>
-
-                        <div class="progress">
-                            <div
-                                class="progress-bar"
-                                style="width:${progress}%">
-                            </div>
-                        </div>
-
-                    </div>
-
-                    <div class="course-footer">
-
-                        <small>
-                            ${course.completed || 0}
-                            /
-                            ${course.total || 0}
-                            강
-                        </small>
-
-                        <button
-                            data-course="${course.id}">
-                            상세 보기 →
-                        </button>
-
-                    </div>
-
-                </article>
-            `;
-        }).join("");
-}
-
-
-/* =========================================================
-   COURSE DETAIL
-========================================================= */
-
-function openCourseDetail(id) {
-
-    const course =
-        state.courses.find(
-            item => item.id === id
-        );
-
-    if (!course) return;
-
-    $("#detailCourseName").textContent =
-        course.name;
-
-    const progress =
-        getProgress(course);
-
-    $("#courseDetailContent").innerHTML = `
-
-        <div class="progress-wrap">
-
-            <div class="progress-label">
-                <span>현재 진도</span>
-                <strong>${progress}%</strong>
-            </div>
-
-            <div class="progress">
-                <div
-                    class="progress-bar"
-                    style="width:${progress}%">
-                </div>
-            </div>
-
-        </div>
-
-        <div style="margin-top:20px">
-
-            <label>
-                완료 강의 수
-                <input
-                    id="detailCompleted"
-                    type="number"
-                    min="0"
-                    max="${course.total}"
-                    value="${course.completed || 0}">
-            </label>
-
-        </div>
-
-        <button
-            id="saveCourseProgress"
-            class="primary-button full-width">
-            진도 저장
-        </button>
-    `;
-
-    openModal("courseDetailModal");
-
-    $("#saveCourseProgress")
-        .onclick = () => {
-
-            let completed =
-                Number(
-                    $("#detailCompleted").value
-                );
-
-            completed =
-                Math.max(
-                    0,
-                    Math.min(
-                        course.total,
-                        completed
-                    )
-                );
-
-            course.completed =
-                completed;
-
-            saveState();
-
-            renderAll();
-
-            closeModal(
-                "courseDetailModal"
-            );
-
-            showToast(
-                "강좌 진도가 저장되었습니다."
-            );
-        };
-}
-
-
-/* =========================================================
-   PLAN
-========================================================= */
-
-function renderTodayPlan() {
-
-    const date =
-        todayString();
-
-    const plans =
-        state.plans
-            .filter(
-                plan => plan.date === date
-            )
-            .sort(
-                (a, b) =>
-                    Number(a.completed) -
-                    Number(b.completed)
-            );
-
-    $("#todayModalDate").textContent =
-        formatDate(date);
-
-    $("#todayEmpty")
-        .classList.toggle(
-            "hidden",
-            plans.length !== 0
-        );
-
-    $("#todayPlanList").innerHTML =
-        plans.map(plan => `
-
-            <div
-                class="today-plan ${
-                    plan.completed
-                        ? "completed"
-                        : ""
-                }">
-
-                <input
-                    class="plan-check"
-                    type="checkbox"
-                    ${plan.completed ? "checked" : ""}
-                    data-plan-check="${plan.id}">
-
-                <div class="today-plan-content">
-
-                    <strong>
-                        ${escapeHTML(plan.title)}
-                    </strong>
-
-                    <small>
-                        ${escapeHTML(
-                            plan.subject || "일반"
-                        )}
-                        ·
-                        ${plan.minutes || 0}분
-                    </small>
-
-                </div>
-
-                <button
-                    class="modal-close"
-                    data-plan-delete="${plan.id}">
-                    ×
-                </button>
-
-            </div>
-
-        `).join("");
-}
-
-function renderWeek() {
-
-    const container =
-        $("#weekPlan");
-
-    const base =
-        new Date();
-
-    const day =
-        base.getDay();
-
-    const mondayOffset =
-        day === 0 ? -6 : 1 - day;
-
-    container.innerHTML = "";
-
-    const names = [
-        "월",
-        "화",
-        "수",
-        "목",
-        "금",
-        "토",
-        "일"
-    ];
-
-    for (let i = 0; i < 7; i++) {
-
-        const date =
-            new Date(base);
-
-        date.setDate(
-            base.getDate() +
-            mondayOffset +
-            i
-        );
-
-        const dateString =
-            date.toISOString()
-                .slice(0, 10);
-
-        const plans =
-            state.plans.filter(
-                plan =>
-                    plan.date ===
-                    dateString
-            );
-
-        const card =
-            document.createElement("div");
-
-        card.className =
-            "day-card" +
-            (
-                dateString === todayString()
-                    ? " today"
-                    : ""
-            );
-
-        card.innerHTML = `
-
-            <div class="day-name">
-                ${names[i]}요일
-            </div>
-
-            <div class="day-date">
-                ${date.getMonth() + 1}/${date.getDate()}
-            </div>
-
-            <div class="day-plan">
-
-                ${
-                    plans.length
-                        ? plans.map(
-                            plan => `
-                                <div
-                                    class="mini-plan ${
-                                        plan.completed
-                                            ? "done"
-                                            : ""
-                                    }">
-                                    ${escapeHTML(
-                                        plan.title
-                                    )}
-                                </div>
-                            `
-                        ).join("")
-                        : `
-                            <div
-                                style="
-                                    color:var(--muted);
-                                    font-size:11px;
-                                    margin-top:15px;
-                                ">
-                                계획 없음
-                            </div>
-                        `
-                }
-
-            </div>
-        `;
-
-        container.appendChild(card);
-    }
-}
-
-
-/* =========================================================
-   MODALS
-========================================================= */
-
-function openModal(id) {
-    const modal = $(`#${id}`);
-
-    if (modal) {
-        modal.classList.remove("hidden");
-    }
-}
-
-function closeModal(id) {
-    const modal = $(`#${id}`);
-
-    if (modal) {
-        modal.classList.add("hidden");
-    }
-}
-
-function closeAllModals() {
-    $$(".modal").forEach(
-        modal =>
-            modal.classList.add("hidden")
-    );
-}
-
-
-/* =========================================================
-   TOAST
-========================================================= */
-
-let toastTimer;
-
-function showToast(message) {
-
-    const toast =
-        $("#toast");
-
-    toast.textContent =
-        message;
-
-    toast.classList.add("show");
-
-    clearTimeout(toastTimer);
-
-    toastTimer =
-        setTimeout(
-            () =>
-                toast.classList.remove(
-                    "show"
-                ),
-            2500
-        );
-}
-
-
-/* =========================================================
-   BACKUP
-========================================================= */
-
-function backupData() {
-
-    const data = {
-        version: 4,
-        exportedAt:
-            new Date().toISOString(),
-        ...state
-    };
-
-    const blob =
-        new Blob(
-            [
-                JSON.stringify(
-                    data,
-                    null,
-                    2
-                )
-            ],
-            {
-                type:
-                    "application/json"
-            }
-        );
-
-    const url =
-        URL.createObjectURL(blob);
-
-    const a =
-        document.createElement("a");
-
-    a.href = url;
-
-    a.download =
-        `sps-backup-${todayString()}.json`;
-
-    a.click();
-
-    URL.revokeObjectURL(url);
-
-    showToast(
-        "데이터를 백업했습니다."
-    );
-}
-
-function restoreData(file) {
-
-    const reader =
-        new FileReader();
-
-    reader.onload = event => {
-
-        try {
-
-            const data =
-                JSON.parse(
-                    event.target.result
-                );
-
-            if (
-                !Array.isArray(
-                    data.courses
-                ) ||
-                !Array.isArray(
-                    data.plans
-                )
-            ) {
-                throw new Error(
-                    "invalid"
-                );
-            }
-
-            state = {
-                courses:
-                    data.courses,
-                plans:
-                    data.plans
-            };
-
-            saveState();
-
-            renderAll();
-
-            showToast(
-                "데이터를 복원했습니다."
-            );
-
-        } catch {
-
-            alert(
-                "올바른 SPS 백업 파일이 아닙니다."
-            );
         }
-    };
 
-    reader.readAsText(file);
-}
+        else if (
+          Array.isArray(data)
+        ) {
+
+          importedCourses =
+            data;
+
+          importedSubjects =
+            DEFAULT_SUBJECTS;
+
+        }
+
+        else {
+
+          throw new Error(
+            "Invalid data"
+          );
+
+        }
 
 
-/* =========================================================
-   NOTIFICATIONS
-========================================================= */
+        if (
+          !confirm(
+            "현재 데이터를 백업 파일의 데이터로 교체하시겠습니까?"
+          )
+        ) {
 
-function getNotificationEnabled() {
+          event.target.value = "";
 
-    return (
-        localStorage.getItem(
-            NOTIFICATION_KEY
-        ) === "true"
-    );
-}
+          return;
 
-function setNotificationEnabled(value) {
+        }
 
-    localStorage.setItem(
-        NOTIFICATION_KEY,
-        String(value)
-    );
-}
 
-async function requestNotificationPermission() {
+        subjects =
+          importedSubjects;
 
-    if (!("Notification" in window)) {
+
+        courses =
+          importedCourses;
+
+
+        normalizeData();
+
+
+        renderSubjectDropdowns();
+
+        renderSubjectList();
+
+        renderCourses();
+
+        renderDashboard();
+
 
         alert(
-            "이 브라우저는 알림 기능을 지원하지 않습니다."
+          "데이터를 성공적으로 복원했습니다."
         );
 
-        return false;
-    }
+      }
 
-    const permission =
-        await Notification.requestPermission();
+      catch (error) {
 
-    if (permission !== "granted") {
+        console.error(error);
 
-        showToast(
-            "알림 권한이 허용되지 않았습니다."
+        alert(
+          "올바른 SPS JSON 파일이 아닙니다."
         );
 
-        return false;
-    }
+      }
 
-    return true;
-}
 
-async function enableNotifications() {
+      event.target.value = "";
 
-    const granted =
-        await requestNotificationPermission();
+    };
 
-    if (!granted) {
 
-        $("#notificationToggle").checked =
-            false;
+  reader.readAsText(file);
 
-        setNotificationEnabled(false);
-
-        return;
-    }
-
-    setNotificationEnabled(true);
-
-    $("#notificationToggle").checked =
-        true;
-
-    showToast(
-        "매일 오전 7시 알림을 활성화했습니다."
-    );
-
-    scheduleNextMorningCheck();
-}
-
-function disableNotifications() {
-
-    setNotificationEnabled(false);
-
-    $("#notificationToggle").checked =
-        false;
-
-    showToast(
-        "아침 알림을 비활성화했습니다."
-    );
 }
 
 
-/* =========================================================
-   7 AM CHECK
-========================================================= */
-
-function notificationKeyForToday() {
-
-    return `sps_morning_${todayString()}`;
-}
-
-async function sendTodayNotification() {
-
-    if (
-        !("serviceWorker" in navigator)
-    ) {
-        return;
-    }
-
-    if (
-        !("Notification" in window) ||
-        Notification.permission !== "granted"
-    ) {
-        return;
-    }
-
-    const registration =
-        await navigator.serviceWorker.ready;
-
-    const count =
-        state.plans.filter(
-            plan =>
-                plan.date === todayString()
-        ).length;
-
-    await registration.showNotification(
-        "StudyPlanService",
-        {
-            body:
-                "오늘의 계획을 확인하세요!",
-            icon:
-                "image/icon-192.png",
-            badge:
-                "image/icon-192.png",
-            tag:
-                "sps-morning-plan",
-            renotify: true,
-            data: {
-                url:
-                    "./?showToday=true"
-            }
-        }
-    );
-}
-
-async function checkMorningNotification() {
-
-    if (
-        !getNotificationEnabled()
-    ) {
-        return;
-    }
-
-    if (
-        Notification.permission !==
-        "granted"
-    ) {
-        return;
-    }
-
-    const now =
-        new Date();
-
-    const minutes =
-        now.getHours() * 60 +
-        now.getMinutes();
-
-    /*
-     * 오전 7시 이후에 앱이 실행되었다면
-     * 오늘 알림을 아직 보내지 않은 경우
-     * 한 번 표시한다.
-     */
-
-    if (minutes < 7 * 60) {
-        return;
-    }
-
-    const key =
-        notificationKeyForToday();
-
-    if (
-        localStorage.getItem(key) === "sent"
-    ) {
-        return;
-    }
-
-    localStorage.setItem(
-        key,
-        "sent"
-    );
-
-    await sendTodayNotification();
-}
-
-function scheduleNextMorningCheck() {
-
-    const now =
-        new Date();
-
-    const next =
-        new Date(now);
-
-    next.setHours(7, 0, 0, 0);
-
-    if (next <= now) {
-        next.setDate(
-            next.getDate() + 1
-        );
-    }
-
-    const delay =
-        next.getTime() -
-        now.getTime();
-
-    setTimeout(
-        async () => {
-
-            await checkMorningNotification();
-
-            scheduleNextMorningCheck();
-
-        },
-        Math.min(
-            delay,
-            2147483647
-        )
-    );
-}
-
-
-/* =========================================================
-   NOTIFICATION CLICK RESULT
-========================================================= */
-
-function checkNotificationLaunch() {
-
-    const params =
-        new URLSearchParams(
-            window.location.search
-        );
-
-    if (
-        params.get("showToday") ===
-        "true"
-    ) {
-
-        /*
-         * 앱 초기 렌더링이 끝난 뒤
-         * 오늘의 계획 팝업을 연다.
-         */
-
-        setTimeout(
-            () => {
-
-                renderTodayPlan();
-
-                openModal(
-                    "todayModal"
-                );
-
-                history.replaceState(
-                    {},
-                    "",
-                    window.location.pathname
-                );
-
-            },
-            350
-        );
-    }
-}
-
-
-/* =========================================================
-   PWA INSTALL
-========================================================= */
+/* =========================================
+   PWA
+========================================= */
 
 window.addEventListener(
-    "beforeinstallprompt",
-    event => {
+  "beforeinstallprompt",
+  event => {
 
-        event.preventDefault();
+    event.preventDefault();
 
-        deferredInstallPrompt =
-            event;
+    deferredInstallPrompt =
+      event;
 
-        $("#installBtn")
-            .classList.remove(
-                "hidden"
-            );
-    }
+    showInstallButtons();
+
+  }
 );
+
 
 window.addEventListener(
-    "appinstalled",
-    () => {
+  "appinstalled",
+  () => {
 
-        deferredInstallPrompt =
-            null;
+    deferredInstallPrompt =
+      null;
 
-        $("#installBtn")
-            .classList.add(
-                "hidden"
-            );
+    hideInstallButtons();
 
-        showToast(
-            "StudyPlanService가 설치되었습니다."
-        );
-    }
+  }
 );
+
+
+function setupInstallButton() {
+
+  if (
+    window.matchMedia(
+      "(display-mode: standalone)"
+    ).matches
+  ) {
+
+    hideInstallButtons();
+
+  }
+
+}
+
+
+function showInstallButtons() {
+
+  [
+    "install-app-btn",
+    "desktop-install-btn",
+    "settings-install-btn"
+  ]
+    .forEach(id => {
+
+      const button =
+        document.getElementById(id);
+
+      if (button) {
+        button.style.display =
+          "";
+      }
+
+    });
+
+}
+
+
+function hideInstallButtons() {
+
+  [
+    "install-app-btn",
+    "desktop-install-btn"
+  ]
+    .forEach(id => {
+
+      const button =
+        document.getElementById(id);
+
+      if (button) {
+        button.style.display =
+          "none";
+      }
+
+    });
+
+}
+
 
 async function installApp() {
 
-    if (!deferredInstallPrompt) {
+  if (!deferredInstallPrompt) {
 
-        showToast(
-            "브라우저 메뉴에서 앱 설치를 선택할 수 있습니다."
-        );
+    alert(
+      "현재 브라우저에서 바로 설치할 수 없습니다.\n\n브라우저 메뉴의 '앱 설치' 또는 '홈 화면에 추가'를 이용해주세요."
+    );
 
-        return;
-    }
+    return;
 
-    deferredInstallPrompt.prompt();
+  }
+
+
+  deferredInstallPrompt.prompt();
+
+
+  try {
 
     await deferredInstallPrompt
-        .userChoice;
+      .userChoice;
 
-    deferredInstallPrompt =
-        null;
+  }
 
-    $("#installBtn")
-        .classList.add(
-            "hidden"
-        );
+  catch (error) {
+
+    console.error(error);
+
+  }
+
+
+  deferredInstallPrompt =
+    null;
+
+  hideInstallButtons();
+
 }
 
 
-/* =========================================================
+/* =========================================
    SERVICE WORKER
-========================================================= */
+========================================= */
 
-async function registerServiceWorker() {
+function setupServiceWorker() {
 
-    if (
-        !("serviceWorker" in navigator)
-    ) {
-        return;
-    }
+  if (
+    !("serviceWorker" in navigator)
+  ) {
+    return;
+  }
 
-    try {
 
-        await navigator.serviceWorker.register(
-            "./sw.js"
-        );
+  navigator.serviceWorker
+    .register(
+      "./sw.js"
+    )
+    .then(() => {
 
-    } catch (error) {
+      console.log(
+        "SPS Service Worker registered."
+      );
 
-        console.error(
-            "Service Worker registration failed:",
-            error
-        );
-    }
+    })
+    .catch(error => {
+
+      console.error(
+        "Service Worker error:",
+        error
+      );
+
+    });
+
 }
 
 
-/* =========================================================
-   EVENT LISTENERS
-========================================================= */
+/* =========================================
+   NOTIFICATION
+========================================= */
 
-function setupEvents() {
+async function requestNotificationPermission() {
 
-    $("#themeBtn").onclick =
-        toggleTheme;
+  if (
+    !("Notification" in window)
+  ) {
 
-    $("#todayPlanBtn").onclick =
-        () => {
+    alert(
+      "이 브라우저에서는 알림을 사용할 수 없습니다."
+    );
 
-            renderTodayPlan();
+    return;
 
-            openModal(
-                "todayModal"
-            );
-        };
+  }
 
-    $("#addCourseBtn").onclick =
-        () =>
-            openModal(
-                "courseModal"
-            );
 
-    $("#addPlanBtn").onclick =
-        () => {
+  const permission =
+    await Notification.requestPermission();
 
-            $("#planDate").value =
-                todayString();
 
-            openModal(
-                "planModal"
-            );
-        };
+  if (
+    permission === "granted"
+  ) {
 
-    $("#backupBtn").onclick =
-        backupData;
+    alert(
+      "알림 권한이 허용되었습니다."
+    );
 
-    $("#restoreBtn").onclick =
-        () =>
-            $("#restoreFile").click();
+  }
 
-    $("#restoreFile").onchange =
-        event => {
+  else {
 
-            const file =
-                event.target.files[0];
+    alert(
+      "알림 권한이 허용되지 않았습니다."
+    );
 
-            if (file) {
-                restoreData(file);
-            }
+  }
 
-            event.target.value = "";
-        };
+}
 
-    $("#settingsBtn").onclick =
-        () =>
-            openModal(
-                "settingsModal"
-            );
 
-    $("#notificationBtn").onclick =
-        () =>
-            openModal(
-                "notificationModal"
-            );
+function checkMorningNotification() {
 
-    $("#settingsNotification").onclick =
-        () => {
+  const now =
+    new Date();
 
-            closeModal(
-                "settingsModal"
-            );
 
-            $("#notificationToggle").checked =
-                getNotificationEnabled();
+  const hour =
+    now.getHours();
 
-            openModal(
-                "notificationModal"
-            );
-        };
 
-    $("#settingsBackup").onclick =
-        () => {
+  const today =
+    now.toISOString()
+      .slice(0, 10);
 
-            backupData();
 
-            closeModal(
-                "settingsModal"
-            );
-        };
+  const key =
+    "sps_morning_notification";
 
-    $("#settingsReset").onclick =
-        () => {
 
-            const confirmed =
-                confirm(
-                    "모든 강좌와 학습 계획을 삭제할까요?\n이 작업은 되돌릴 수 없습니다."
-                );
+  const last =
+    localStorage.getItem(key);
 
-            if (!confirmed) {
-                return;
-            }
 
-            state = {
-                courses: [],
-                plans: []
-            };
+  /*
+   * 오전 7시 이후 앱을 열었을 때
+   * 오늘 아직 안내하지 않았다면 표시.
+   *
+   * 브라우저가 완전히 종료된 상태에서
+   * 정확히 07:00에 실행되는 것은
+   * 순수 PWA만으로 보장할 수 없다.
+   */
 
-            saveState();
+  if (
+    hour >= 7 &&
+    last !== today
+  ) {
 
-            renderAll();
-
-            closeModal(
-                "settingsModal"
-            );
-
-            showToast(
-                "모든 데이터가 삭제되었습니다."
-            );
-        };
-
-    $("#notificationToggle").onchange =
-        event => {
-
-            if (event.target.checked) {
-                enableNotifications();
-            } else {
-                disableNotifications();
-            }
-        };
-
-    $("#testNotificationBtn").onclick =
-        async () => {
-
-            const granted =
-                await requestNotificationPermission();
-
-            if (!granted) {
-                return;
-            }
-
-            await sendTodayNotification();
-
-            showToast(
-                "테스트 알림을 보냈습니다."
-            );
-        };
-
-    $("#installBtn").onclick =
-        installApp;
-
-    $("#courseSearch").oninput =
-        renderCourses;
-
-    $("#subjectFilter").onchange =
-        renderCourses;
-
-
-    /* COURSE FORM */
-
-    $("#courseForm").onsubmit =
-        event => {
-
-            event.preventDefault();
-
-            const course = {
-
-                id:
-                    uid("course"),
-
-                name:
-                    $("#courseName")
-                        .value
-                        .trim(),
-
-                subject:
-                    $("#courseSubject")
-                        .value
-                        .trim(),
-
-                teacher:
-                    $("#courseTeacher")
-                        .value
-                        .trim(),
-
-                total:
-                    Number(
-                        $("#courseTotal")
-                            .value
-                    ),
-
-                completed: 0
-            };
-
-            state.courses.push(
-                course
-            );
-
-            saveState();
-
-            renderAll();
-
-            event.target.reset();
-
-            $("#courseTotal").value =
-                20;
-
-            closeModal(
-                "courseModal"
-            );
-
-            showToast(
-                "강좌가 추가되었습니다."
-            );
-        };
-
-
-    /* PLAN FORM */
-
-    $("#planForm").onsubmit =
-        event => {
-
-            event.preventDefault();
-
-            const plan = {
-
-                id:
-                    uid("plan"),
-
-                title:
-                    $("#planTitle")
-                        .value
-                        .trim(),
-
-                date:
-                    $("#planDate")
-                        .value,
-
-                subject:
-                    $("#planSubject")
-                        .value
-                        .trim(),
-
-                minutes:
-                    Number(
-                        $("#planMinutes")
-                            .value
-                    ),
-
-                completed: false
-            };
-
-            state.plans.push(
-                plan
-            );
-
-            saveState();
-
-            renderAll();
-
-            event.target.reset();
-
-            $("#planDate").value =
-                todayString();
-
-            closeModal(
-                "planModal"
-            );
-
-            showToast(
-                "학습 계획이 추가되었습니다."
-            );
-        };
-
-
-    /* DYNAMIC BUTTONS */
-
-    document.addEventListener(
-        "click",
-        event => {
-
-            const courseButton =
-                event.target.closest(
-                    "[data-course]"
-                );
-
-            if (courseButton) {
-
-                openCourseDetail(
-                    courseButton
-                        .dataset
-                        .course
-                );
-
-                return;
-            }
-
-            const deleteCourse =
-                event.target.closest(
-                    "[data-course-delete]"
-                );
-
-            if (deleteCourse) {
-
-                const id =
-                    deleteCourse
-                        .dataset
-                        .courseDelete;
-
-                if (
-                    confirm(
-                        "이 강좌를 삭제할까요?"
-                    )
-                ) {
-
-                    state.courses =
-                        state.courses.filter(
-                            course =>
-                                course.id !== id
-                        );
-
-                    saveState();
-
-                    renderAll();
-
-                    showToast(
-                        "강좌가 삭제되었습니다."
-                    );
-                }
-
-                return;
-            }
-
-            const checkPlan =
-                event.target.closest(
-                    "[data-plan-check]"
-                );
-
-            if (checkPlan) {
-
-                const plan =
-                    state.plans.find(
-                        item =>
-                            item.id ===
-                            checkPlan
-                                .dataset
-                                .planCheck
-                    );
-
-                if (plan) {
-
-                    plan.completed =
-                        checkPlan.checked;
-
-                    saveState();
-
-                    renderAll();
-
-                    renderTodayPlan();
-                }
-
-                return;
-            }
-
-            const deletePlan =
-                event.target.closest(
-                    "[data-plan-delete]"
-                );
-
-            if (deletePlan) {
-
-                state.plans =
-                    state.plans.filter(
-                        plan =>
-                            plan.id !==
-                            deletePlan
-                                .dataset
-                                .planDelete
-                    );
-
-                saveState();
-
-                renderAll();
-
-                renderTodayPlan();
-
-                return;
-            }
-
-            const closeButton =
-                event.target.closest(
-                    "[data-close]"
-                );
-
-            if (closeButton) {
-
-                closeModal(
-                    closeButton
-                        .dataset
-                        .close
-                );
-            }
-
-        }
+    localStorage.setItem(
+      key,
+      today
     );
 
 
-    /* MODAL BACKDROP */
+    setTimeout(
+      () => {
 
-    $$(".modal-backdrop")
-        .forEach(backdrop => {
+        if (
+          "Notification" in window &&
+          Notification.permission ===
+            "granted"
+        ) {
 
-            backdrop.onclick = () => {
+          new Notification(
+            "SPS · 오늘의 계획",
+            {
+              body:
+                "오늘의 계획을 확인하세요!",
+              icon:
+                "./image/icon-192.png"
+            }
+          );
 
-                const modal =
-                    backdrop.closest(
-                        ".modal"
-                    );
+        }
 
-                if (modal) {
-                    modal.classList.add(
-                        "hidden"
-                    );
-                }
-            };
+        else {
+
+          showTodayPlans();
+
+        }
+
+      },
+      1000
+    );
+
+  }
+
+}
+
+
+/* =========================================
+   MODAL KEYBOARD
+========================================= */
+
+function setupModalKeyboard() {
+
+  document.addEventListener(
+    "keydown",
+    event => {
+
+      if (
+        event.key !== "Escape"
+      ) {
+        return;
+      }
+
+
+      document
+        .querySelectorAll(
+          ".modal.active"
+        )
+        .forEach(modal => {
+
+          modal.classList.remove(
+            "active"
+          );
 
         });
 
 
-    /* ESC */
+      document.body.style.overflow =
+        "";
 
-    document.addEventListener(
-        "keydown",
-        event => {
+    }
+  );
 
-            if (
-                event.key === "Escape"
-            ) {
-                closeAllModals();
-            }
-
-        }
-    );
 }
 
 
-/* =========================================================
-   RENDER ALL
-========================================================= */
+/* =========================================
+   HELPERS
+========================================= */
 
-function renderAll() {
+function getCompletedCount(course) {
 
-    renderSubjects();
+  return (
+    course.completedEpisodes
+      ?.filter(Boolean)
+      .length || 0
+  );
 
-    renderCourses();
-
-    renderWeek();
-
-    updateDashboard();
-
-    $("#todayTitle").textContent =
-        "오늘도 차근차근 시작해볼까요?";
-
-    $("#todayDate").textContent =
-        formatDate(
-            todayString()
-        );
 }
 
 
-/* =========================================================
-   INIT
-========================================================= */
+function getProgress(course) {
 
-async function init() {
+  if (
+    !course.totalEp ||
+    course.totalEp <= 0
+  ) {
+    return 0;
+  }
 
-    loadState();
 
-    loadTheme();
+  return Math.round(
+    (
+      getCompletedCount(course) /
+      course.totalEp
+    ) *
+    100
+  );
 
-    setupEvents();
-
-    renderAll();
-
-    $("#notificationToggle").checked =
-        getNotificationEnabled();
-
-    $("#planDate").value =
-        todayString();
-
-    await registerServiceWorker();
-
-    checkNotificationLaunch();
-
-    await checkMorningNotification();
-
-    scheduleNextMorningCheck();
 }
 
-document.addEventListener(
-    "DOMContentLoaded",
-    init
-);
+
+function getPlanSummary(course) {
+
+  return DAYS
+    .filter(
+      day =>
+        Number(
+          course.plan?.[day]
+        ) > 0
+    )
+    .map(
+      day =>
+        `${day} ${course.plan[day]}강`
+    )
+    .join(" · ");
+
+}
+
+
+function getPlanEpisodeIndexes(
+  course,
+  count
+) {
+
+  const indexes = [];
+
+
+  for (
+    let i = 0;
+    i < course.totalEp &&
+    indexes.length < count;
+    i++
+  ) {
+
+    if (
+      !course.completedEpisodes[i]
+    ) {
+
+      indexes.push(i);
+
+    }
+
+  }
+
+
+  return indexes;
+
+}
+
+
+function escapeHtml(value) {
+
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+
+}

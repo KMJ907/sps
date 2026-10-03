@@ -1,197 +1,177 @@
-const CACHE_NAME = "sps-v4";
+const CACHE_NAME = "sps-v3";
 
 const APP_SHELL = [
-    "./",
-    "./index.html",
-    "./css/style.css",
-    "./js/app.js",
-    "./json/manifest.json",
-    "./image/icon-192.png"
+  "./",
+  "./index.html",
+  "./css/style.css",
+  "./js/app.js",
+  "./manifest.json"
 ];
 
 
-/* =========================================================
-   INSTALL
-========================================================= */
-
 self.addEventListener(
-    "install",
-    event => {
+  "install",
+  event => {
 
-        event.waitUntil(
-            caches
-                .open(CACHE_NAME)
-                .then(
-                    cache =>
-                        cache.addAll(
-                            APP_SHELL
-                        )
-                )
-        );
+    event.waitUntil(
 
-        self.skipWaiting();
-    }
+      caches.open(CACHE_NAME)
+        .then(cache =>
+          cache.addAll(APP_SHELL)
+        )
+
+    );
+
+    self.skipWaiting();
+
+  }
 );
 
 
-/* =========================================================
-   ACTIVATE
-========================================================= */
-
 self.addEventListener(
-    "activate",
-    event => {
+  "activate",
+  event => {
 
-        event.waitUntil(
+    event.waitUntil(
 
-            caches.keys()
-                .then(names =>
-                    Promise.all(
-                        names
-                            .filter(
-                                name =>
-                                    name !==
-                                    CACHE_NAME
-                            )
-                            .map(
-                                name =>
-                                    caches.delete(
-                                        name
-                                    )
-                            )
-                    )
-                )
-        );
+      caches.keys()
+        .then(keys =>
+          Promise.all(
+            keys
+              .filter(
+                key =>
+                  key !== CACHE_NAME
+              )
+              .map(
+                key =>
+                  caches.delete(key)
+              )
+          )
+        )
 
-        self.clients.claim();
-    }
+    );
+
+    self.clients.claim();
+
+  }
 );
 
 
-/* =========================================================
-   FETCH
-========================================================= */
-
 self.addEventListener(
-    "fetch",
-    event => {
+  "fetch",
+  event => {
 
-        if (
-            event.request.method !==
-            "GET"
-        ) {
-            return;
-        }
+    if (
+      event.request.method !== "GET"
+    ) {
+      return;
+    }
 
-        event.respondWith(
 
-            caches.match(
-                event.request
-            )
-            .then(cached => {
+    event.respondWith(
 
-                if (cached) {
-                    return cached;
-                }
+      caches.match(
+        event.request
+      )
+        .then(cached => {
 
-                return fetch(
-                    event.request
-                )
-                .then(response => {
+          if (cached) {
+            return cached;
+          }
 
-                    if (
-                        !response ||
-                        response.status !== 200 ||
-                        response.type ===
-                            "opaque"
-                    ) {
-                        return response;
-                    }
 
-                    const clone =
-                        response.clone();
+          return fetch(
+            event.request
+          )
+            .then(response => {
 
-                    caches.open(
-                        CACHE_NAME
-                    )
-                    .then(
-                        cache =>
-                            cache.put(
-                                event.request,
-                                clone
-                            )
-                    );
+              if (
+                !response ||
+                response.status !== 200
+              ) {
+                return response;
+              }
 
-                    return response;
 
-                })
-                .catch(() =>
-                    caches.match(
-                        "./index.html"
-                    )
+              const clone =
+                response.clone();
+
+
+              caches.open(
+                CACHE_NAME
+              )
+                .then(cache =>
+                  cache.put(
+                    event.request,
+                    clone
+                  )
                 );
 
+
+              return response;
+
             })
-        );
-    }
+            .catch(() =>
+              caches.match(
+                "./index.html"
+              )
+            );
+
+        })
+
+    );
+
+  }
 );
 
 
-/* =========================================================
-   NOTIFICATION CLICK
-========================================================= */
+/*
+ * 알림 클릭 시 SPS를 열도록 처리
+ */
 
 self.addEventListener(
-    "notificationclick",
-    event => {
+  "notificationclick",
+  event => {
 
-        event.notification.close();
+    event.notification.close();
 
-        const targetURL =
-            new URL(
-                "./?showToday=true",
-                self.location.origin +
-                self.registration.scope
-            ).href;
 
-        event.waitUntil(
+    event.waitUntil(
 
-            self.clients
-                .matchAll({
-                    type: "window",
-                    includeUncontrolled: true
-                })
-                .then(
-                    clientList => {
+      clients.matchAll({
+        type: "window",
+        includeUncontrolled: true
+      })
+        .then(clientList => {
 
-                        for (
-                            const client
-                            of clientList
-                        ) {
+          for (
+            const client of clientList
+          ) {
 
-                            if (
-                                "focus" in client
-                            ) {
+            if (
+              "focus" in client
+            ) {
 
-                                client.navigate(
-                                    targetURL
-                                );
+              return client.focus();
 
-                                return client.focus();
-                            }
-                        }
+            }
 
-                        if (
-                            self.clients.openWindow
-                        ) {
+          }
 
-                            return self.clients.openWindow(
-                                targetURL
-                            );
-                        }
 
-                    }
-                )
-        );
-    }
+          if (
+            clients.openWindow
+          ) {
+
+            return clients.openWindow(
+              "./"
+            );
+
+          }
+
+        })
+
+    );
+
+  }
 );
